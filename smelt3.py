@@ -1,23 +1,44 @@
 import sys, os, json, hashlib, inspect, atexit
 
-SMELT_CACHE_FNAME = ".smelt"
+CACHE_FILENAME = ".smelt"
 HELP = """
     No targets or options provided.
     Options:
     --help    -> display this info screen
     --list    -> show a list of all tasks
     --all     -> perform all named tasks
-    --clean   -> clean cache and force remaking  
-    """   
+    --clean   -> clean cache and force remaking
+    """
 
-# globals
-named_tasks = {}
-named_task_descs = {}
-task_cache = {}
-# task globals
-src_stack = []
-skip = False
-current_task = None
+# Globals
+
+tasklist = {}
+
+class TaskNode:
+    def __init__(self, fun, id, pubname=None, pubdesc=None):
+        self.fun = fun
+        self.id = id
+        self.pubname = pubname
+        self.pubdesc = pubdesc
+        self.skip = False
+        self.srcs = []
+
+def find_my_taskid():
+    #print("=============")
+    stack = inspect.stack()
+    for finfo in stack:
+        frame = finfo.frame
+        #print(finfo[3])
+        # print(finfo)
+        if "__secret" in frame.f_locals:
+            return frame.f_locals["__secret"]
+        elif finfo[3] in tasklist:
+            return finfo[3]
+
+    # raise BaseException("something went wrong :P")
+
+def find_my_tasknode():
+    return tasklist[find_my_taskid()]
 
 ## utils
 
@@ -37,30 +58,39 @@ def wf(name, data):
     with open(name, 'w') as f:
         return f.write(data)
 
-## Caching
+## Caching, for now inefficient
 
-def load_cache():
-    global task_cache
-    if task_cache == {}:
-        for line in rf(SMELT_CACHE_FNAME):
-            try:
-                (id, sign) = line.split(' ')
-                task_cache[id] = sign
-            except:pass
+def cache_spawn():
+    if not os.path.exists(CACHE_FILENAME):
+        wf(CACHE_FILENAME, "")
 
-def save_cache():
-    print("Saving cache...")
+def cache_get(taskid):
+    cache_spawn()
+    for line in rf(CACHE_FILENAME).split('\n'):
+        try:
+            (id, sign) = line.split(' ')
+            if id == taskid:
+                return sign
+        except: pass
+    return None
+
+def cache_set(taskid, sign):
+    cache_spawn()
     body = ""
-    for t in task_cache:
-        body += f"{t} {task_cache[t]}\n"
-    wf(SMELT_CACHE_FNAME, body)
-
-atexit.register(save_cache)
-
-def cache_get(task_id):
-    if task_id not in task_cache:
-        return None
-    return task_cache[task_id]
+    present = False
+    for line in rf(CACHE_FILENAME).split('\n'):
+        try:
+            (id, csign) = line.split(' ')
+        except:
+            continue
+        if id == taskid:
+            present = True
+            body += f"{taskid} {sign}\n"
+        else:
+            body += f"{id} {csign}\n"
+    if not present:
+        body += f"{taskid} {sign}\n"
+    wf(CACHE_FILENAME, body)
 
 ## Interaction
 
@@ -75,48 +105,54 @@ def cli():
                 return
             elif arg == "--list":
                 print("Available tasks:")
-                for task in named_tasks:
-                    print(f"--> {task}", end='')
-                    if task in named_task_descs:
-                        print(" -", named_task_descs[task])
+                for tn in tasklist.values():
+                    if tn.pubname is not None:
+                        print(f"--> {tn.pubname}", end='')
+                        if tn.pubdesc is not None:
+                            print(" -", tn.pubdesc)
                 return
             elif arg == "--all":
                 for task in named_tasks:
                     do_task(task)
             elif arg == "--clean":
-                wf(SMELT_CACHE, "")
+                wf(SMELT_CACHE_FNAME, "")
         else:
             do_task(arg)
-    
+
 def do_task(name):
     print(f"[GOAL] {name}")
-    named_tasks[name]()
+    for tn in tasklist.values():
+        if tn.pubname == name:
+            tn.fun()
 
 ## Artifacts
 
 def use(art):
-    src_stack[-1].append(art)
+    find_my_tasknode().srcs.append(art)
     art.set_used()
-    return art    
+    return art
 
 class Artifact:
     ## system
-    
-    def __del__(self):
-        if not self.is_used():
-            print("DROPPED AN UNUSED ARTIFACT")
 
-    ## redefinable
+    def __init__(self):
+        self.used = False
+
     def set_used(self):
-        raise BaseException('undefined artifact feature')
+        self.used = True
 
     def is_used(self):
+        return self.used
+
+    def __del__(self):
+        if not self.is_used():
+            print("[WARN] Dropped an unused artifact")
+
+    # redefinable
+    def identify(self) -> str:
         raise BaseException('undefined artifact feature')
-    
-    def identify(self):
-        raise BaseException('undefined artifact feature')
-        
-    def exists(self):
+
+    def exists(self) -> bool:
         raise BaseException('undefined artifact feature')
 
     def reset(self):
@@ -125,25 +161,22 @@ class Artifact:
 
 class Token(Artifact):
     def __init__(self, token):
+        super().__init__()
         self.token = token
-        self.used = False
-
-    def set_used(self):
-        self.used = True
-
-    def exists(self):
-        return True
 
     def identify(self):
         return self.token
 
+    def exists(self):
+        return True
+
     def is_used(self):
         return self.used
-        
+
 
 class File(Artifact):
     def __init__(self, fname, mtime=False, hash=True, size=True):
-        self.used = False
+        super().__init__()
         self.fname = fname
         self.content = None
         self.mtime = None
@@ -156,9 +189,6 @@ class File(Artifact):
             if size:
                 self.size = os.path.getsize(fname)
 
-    def set_used(self):
-        self.used = True
-
     def exists(self):
         return self.content is not None
 
@@ -168,11 +198,7 @@ class File(Artifact):
     def __str__(self):
         return self.fname
 
-    def is_used(self):
-        return self.used
-    
-
-## Actions
+## Minimalization
 
 def grok_sign(arr):
     sign = ""
@@ -183,48 +209,51 @@ def grok_sign(arr):
         sha256 = hashlib.sha256()
         txt = json.dumps(src.identify()).encode('utf-8')
         sha256.update(txt)
-        sign += sha256.hexdigest()
+        sign += sha256.hexdigest() + "+"
     return sign
 
 def check4skip():
-    load_cache()
-    global skip
-    # Dont recompute if we already know everything is fine
-    if skip:
+    tnode = find_my_tasknode()
+
+    # Dont recompute if we know nothing has changed. This assumes that sources are not modified during builds.
+    if tnode.skip:
        return True
 
-    sign = grok_sign(src_stack[-1])
-
-    print(sign)
-    if cache_get(current_task) == sign:
-        skip = True
-        print('[SKIP]', current_task)
+    sign = grok_sign(tnode.srcs)
+    #print(tnode.fun, sign, cache_get(tnode.id))
+    cached_sign = cache_get(tnode.id)
+    #print(cached_sign, sign, tnode.skip)
+    if cached_sign == sign:
+        tnode.skip = True
+        print('[SKIP]', tnode.id)
         return True
-    print('[BUILD]', current_task)
+    print('[BUILD]', tnode.id)
     return False
+
+## Actions
 
 def shell(cmd):
     if check4skip():
         return
-    return os.system(cmd)    
+    return os.system(cmd)
 
 ## Tasks
 
 def task(name=None, desc=None):
     def real_decorator(f):
-        def inner(*args, **kwargs):
-            global skip, src_stack, current_task
-            current_task = f.__name__
-            src_stack.append([File(sys.argv[0])])
-            result = f(*args, **kwargs)
-            if not skip:
-                task_cache[current_task] = grok_sign(src_stack[-1])
-            src_stack.pop()
-            skip = False
+        def inner(__secret=f.__name__):
+            tnode = find_my_tasknode()
+            scriptdep = File(sys.argv[0])
+            scriptdep.set_used()
+            tnode.srcs.append(scriptdep)
+            result = f()
+            if not tnode.skip:
+                print("Writing to cache...")
+                cache_set(tnode.id, grok_sign(tnode.srcs))
+            # clearing sources
+            tnode.srcs = []
             return result
-        if name is not None:
-            named_tasks[name] = inner
-            if desc is not None:
-                named_task_descs[name] = desc
+        id  = f.__name__
+        tasklist[id] = TaskNode(inner, id, name, desc)
         return inner
     return real_decorator
