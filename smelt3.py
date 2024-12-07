@@ -129,7 +129,9 @@ def do_task(name):
     validpubname = False
     for tn in tasklist.values():
         if tn.pubname == name:
-            tn.fun()
+            final = tn.fun()
+            final.set_used()
+            print("[DONE]", name)
             validpubname = True
     if not validpubname:
         print(f"Could not find task with public name '{name}'")
@@ -137,6 +139,16 @@ def do_task(name):
 ## Artifacts
 
 def use(art):
+    # Flatten lists and dicts
+    if type(art) == type([]):
+        for a in art:
+            use(a)
+        return
+    elif type(art) == type({}):
+        for val in art.values():
+            use(val)
+        return
+
     find_my_tasknode().srcs.append(art)
     art.set_used()
     return art
@@ -165,7 +177,7 @@ class Artifact:
         raise BaseException('undefined artifact feature')
 
     def reset(self):
-        pass
+        raise BaseException('undefined artifact feature')
 
 
 class Token(Artifact):
@@ -178,9 +190,6 @@ class Token(Artifact):
 
     def exists(self):
         return True
-
-    def is_used(self):
-        return self.used
 
 
 class File(Artifact):
@@ -206,6 +215,15 @@ class File(Artifact):
 
     def __str__(self):
         return self.fname
+
+def file_tree(directory: str):
+    result = {}
+    for e in os.listdir(directory):
+        if os.path.isfile(directory + "/" + e):
+            result[e] = File(directory + "/" + e)
+        elif os.path.isdir(directory + "/" + e):
+            result[e] = file_tree(directory + "/" + e)
+    return result
 
 ## Minimalization
 
