@@ -250,12 +250,12 @@ def shell(cmd):
 
 def task(name=None, desc=None):
     def real_decorator(f):
-        def inner(__secret=f.__name__):
+        def inner(__secret=f.__name__, **kwargs):
             tnode = find_my_tasknode()
             scriptdep = File(sys.argv[0])
             scriptdep.set_used()
             tnode.srcs.append(scriptdep)
-            result = f()
+            result = f(**kwargs)
             if not tnode.skip:
                 cache_set(tnode.id, grok_sign(tnode.srcs))
             # clearing sources
