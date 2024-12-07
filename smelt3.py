@@ -1,6 +1,5 @@
-import sys, os, json, hashlib, inspect, atexit
+import sys, os, json, hashlib, inspect, atexit, shutil
 
-CACHE_FILENAME = ".smelt"
 HELP = """
     No targets or options provided.
     Options:
@@ -9,10 +8,18 @@ HELP = """
     --all     -> perform all named tasks
     --clean   -> clean cache and force remaking
     """
+# Config
+CACHE_FILENAME = ".smelt"
+CACHE_SYNC_PERIODIC = False
+CACHE_SYNC_ATEXIT = True
 
 # Globals
 
 tasklist = {}
+cache = {}
+is_cache_changed = False
+
+# Core
 
 class TaskNode:
     def __init__(self, fun, id, pubname=None, pubdesc=None):
@@ -61,9 +68,42 @@ def wf(name, data):
 ## Caching, for now inefficient
 
 def cache_spawn():
+    global cache
     if not os.path.exists(CACHE_FILENAME):
         wf(CACHE_FILENAME, "")
+        return
+    for line in rf(CACHE_FILENAME).split('\n'):
+        try:
+            (id, sign) = line.split(' ')
+            cache[id] = sign
+        except: pass
 
+def cache_sync():
+    if not is_cache_changed:
+        return
+    body = ""
+    for id in cache:
+        body += f"{id} {cache[id]}\n"
+    wf(CACHE_FILENAME, body)
+    print(f"[SYNC] Cache {CACHE_FILENAME}")
+
+atexit.register(lambda: cache_sync() if CACHE_SYNC_ATEXIT else None )
+
+def cache_get(taskid):
+    global cache
+    cache_spawn()
+    if taskid not in cache:
+        return None
+    return cache[taskid]
+
+def cache_set(taskid, sign):
+    global cache, is_cache_changed
+    cache[taskid] = sign
+    is_cache_changed = True
+    if CACHE_SYNC_PERIODIC:
+        cache_sync()
+
+"""
 def cache_get(taskid):
     cache_spawn()
     for line in rf(CACHE_FILENAME).split('\n'):
@@ -91,6 +131,7 @@ def cache_set(taskid, sign):
     if not present:
         body += f"{taskid} {sign}\n"
     wf(CACHE_FILENAME, body)
+"""
 
 ## Interaction
 
@@ -130,13 +171,16 @@ def do_task(name):
     for tn in tasklist.values():
         if tn.pubname == name:
             final = tn.fun()
-            final.set_used()
-            print("[DONE]", name)
+            if type(final) != type([]):
+                final = [final]
+            print("[DONE] ", end="")
+            for a in final:
+                a.set_used()
+                print(a.display(), end=" ")
+            print()
             validpubname = True
     if not validpubname:
         print(f"Could not find task with public name '{name}'")
-
-## Artifacts
 
 def use(art):
     # Flatten lists and dicts
@@ -152,6 +196,8 @@ def use(art):
     find_my_tasknode().srcs.append(art)
     art.set_used()
     return art
+
+## Artifacts
 
 class Artifact:
     ## system
@@ -176,7 +222,7 @@ class Artifact:
     def exists(self) -> bool:
         raise BaseException('undefined artifact feature')
 
-    def reset(self):
+    def display(self) -> str:
         raise BaseException('undefined artifact feature')
 
 
@@ -190,6 +236,9 @@ class Token(Artifact):
 
     def exists(self):
         return True
+
+    def display(self) -> str:
+        return f"Token({self.token})"
 
 
 class File(Artifact):
@@ -213,8 +262,13 @@ class File(Artifact):
     def identify(self):
         return f"{self.fname}{self.content}{self.mtime}{self.size}"
 
+    def display(self) -> str:
+        return f"File({self.fname})"
+
     def __str__(self):
         return self.fname
+
+# Tools
 
 def file_tree(directory: str):
     result = {}
@@ -263,6 +317,21 @@ def shell(cmd):
     if check4skip():
         return
     return os.system(cmd)
+
+def copy(src, dest):
+    if check4skip():
+        return
+    shutil.copy(src, dest)
+
+def delete(fname, ignore_error=False):
+    if check4skip():
+        return
+    if ignore_error:
+        try:
+            os.remove(fname)
+        except: pass
+    else:
+        os.remove(fname)
 
 ## Tasks
 

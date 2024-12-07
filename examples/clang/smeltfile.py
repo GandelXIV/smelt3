@@ -1,7 +1,8 @@
 import sys
 sys.path.insert(1, '../../')
 import smelt3
-from smelt3 import task, use, File, shell
+from smelt3 import task, use, File, shell, file_tree
+
 
 # Tasks are functions that simply return their produced artifacts
 @task('app', "Build the application")
