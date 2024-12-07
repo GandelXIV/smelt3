@@ -1,4 +1,4 @@
-import sys, os, json, hashlib, inspect, atexit, shutil
+import sys, os, json, hashlib, inspect, atexit, shutil, subprocess
 
 HELP = """
     No targets or options provided.
@@ -31,23 +31,20 @@ class TaskNode:
         self.srcs = []
 
 def find_my_taskid():
-    #print("=============")
     stack = inspect.stack()
     for finfo in stack:
         frame = finfo.frame
-        #print(finfo[3])
-        # print(finfo)
         if "__secret" in frame.f_locals:
             return frame.f_locals["__secret"]
         elif finfo[3] in tasklist:
             return finfo[3]
 
-    # raise BaseException("something went wrong :P")
+    raise BaseException("Invalid context, no associated task found")
 
 def find_my_tasknode():
     return tasklist[find_my_taskid()]
 
-## utils
+## FS utils
 
 def rf(name):
     with open(name, 'r') as f:
@@ -285,7 +282,7 @@ def grok_sign(arr):
     sign = ""
     for src in arr:
         if not src.exists():
-            print("[ERROR] Missing artifact:", src)
+            print("[ERROR] Missing artifact:", src.display())
             sys.exit()
         sha256 = hashlib.sha256()
         txt = json.dumps(src.identify()).encode('utf-8')
@@ -301,9 +298,8 @@ def check4skip():
        return True
 
     sign = grok_sign(tnode.srcs)
-    #print(tnode.fun, sign, cache_get(tnode.id))
     cached_sign = cache_get(tnode.id)
-    #print(cached_sign, sign, tnode.skip)
+
     if cached_sign == sign:
         tnode.skip = True
         print(f'[SKIP] {tnode.id} ({tnode.pubname})')
@@ -316,7 +312,10 @@ def check4skip():
 def shell(cmd):
     if check4skip():
         return
-    return os.system(cmd)
+    ret = subprocess.call(cmd, shell=True)
+    if ret != 0:
+        print(f"[ERROR] While shell processing: {cmd}")
+        sys.exit(ret)
 
 def copy(src, dest):
     if check4skip():
