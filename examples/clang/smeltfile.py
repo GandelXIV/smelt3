@@ -24,7 +24,7 @@ def make_main(compiler="gcc"):
     hdr = use(File("lib.h"))
     shell(f"{compiler} -c {src} -o {out}")
     # Artifacts can be configured to reduce build analysis time
-    return File(out)
+    return File(out, mtime=True, hash=False)
 
 # We can define abstractions
 def gcc_compile(main, name="a.out", hdrs=[], tobj = False):
@@ -46,13 +46,6 @@ def make_lib():
         hdrs = ["lib.h"],
         tobj = True
     )
-
-def makxe_lib():
-    out = "lib.o"
-    src = use(File("lib.c"))
-    hdr = use(File("lib.h"))
-    shell(f"gcc -c {src} -o {out}")
-    return File(out)
 
 # Turn this script into a CLI program
 smelt3.cli()

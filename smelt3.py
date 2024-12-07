@@ -199,7 +199,7 @@ class File(Artifact):
                 self.size = os.path.getsize(fname)
 
     def exists(self):
-        return self.content is not None
+        return os.path.exists(self.fname)
 
     def identify(self):
         return f"{self.fname}{self.content}{self.mtime}{self.size}"
