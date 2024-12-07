@@ -213,7 +213,7 @@ def grok_sign(arr):
     sign = ""
     for src in arr:
         if not src.exists():
-            print("Missing artifact:", src)
+            print("[ERROR] Missing artifact:", src)
             sys.exit()
         sha256 = hashlib.sha256()
         txt = json.dumps(src.identify()).encode('utf-8')

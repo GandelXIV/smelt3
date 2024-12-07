@@ -23,10 +23,31 @@ def make_main(compiler="gcc"):
     src = use(File("main.c"))
     hdr = use(File("lib.h"))
     shell(f"{compiler} -c {src} -o {out}")
+    # Artifacts can be configured to reduce build analysis time
     return File(out)
 
+# We can define abstractions
+def gcc_compile(main, name="a.out", hdrs=[], tobj = False):
+    use(File(main))
+    for hdr in hdrs:
+        use(File(hdr))
+    flags = ""
+    if tobj:
+        flags += "-c"
+    shell(f"gcc {flags} {main} -o {name}")
+    return File(name)
+
+# A task using an abstraction
 @task()
 def make_lib():
+    return gcc_compile(
+        main = "lib.c",
+        name = "lib.o",
+        hdrs = ["lib.h"],
+        tobj = True
+    )
+
+def makxe_lib():
     out = "lib.o"
     src = use(File("lib.c"))
     hdr = use(File("lib.h"))
