@@ -114,18 +114,25 @@ def cli():
                             print('')
                 return
             elif arg == "--all":
-                for task in tasklist:
-                    do_task(task)
+                for task in tasklist.values():
+                    if task.pubname is not None:
+                        do_task(task.pubname)
             elif arg == "--clean":
                 wf(CACHE_FILENAME, "")
+            else:
+                print(f"No option '{arg}' found")
         else:
             do_task(arg)
 
 def do_task(name):
     print(f"[GOAL] {name}")
+    validpubname = False
     for tn in tasklist.values():
         if tn.pubname == name:
             tn.fun()
+            validpubname = True
+    if not validpubname:
+        print(f"Could not find task with public name '{name}'")
 
 ## Artifacts
 
