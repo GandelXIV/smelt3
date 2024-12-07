@@ -10,7 +10,7 @@ def make_app():
     shell(f"gcc {obj1} {obj2} -o {out}")
     return File(out)
 
-@task()
+@task('main.o')
 def make_main():
     out = "main.o"
     src = use(File("main.c"))

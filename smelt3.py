@@ -110,12 +110,14 @@ def cli():
                         print(f"--> {tn.pubname}", end='')
                         if tn.pubdesc is not None:
                             print(" -", tn.pubdesc)
+                        else:
+                            print('')
                 return
             elif arg == "--all":
-                for task in named_tasks:
+                for task in tasklist:
                     do_task(task)
             elif arg == "--clean":
-                wf(SMELT_CACHE_FNAME, "")
+                wf(CACHE_FILENAME, "")
         else:
             do_task(arg)
 
@@ -225,9 +227,9 @@ def check4skip():
     #print(cached_sign, sign, tnode.skip)
     if cached_sign == sign:
         tnode.skip = True
-        print('[SKIP]', tnode.id)
+        print(f'[SKIP] {tnode.id} ({tnode.pubname})')
         return True
-    print('[BUILD]', tnode.id)
+    print(f'[EXEC] {tnode.id} ({tnode.pubname})')
     return False
 
 ## Actions
@@ -248,7 +250,6 @@ def task(name=None, desc=None):
             tnode.srcs.append(scriptdep)
             result = f()
             if not tnode.skip:
-                print("Writing to cache...")
                 cache_set(tnode.id, grok_sign(tnode.srcs))
             # clearing sources
             tnode.srcs = []
