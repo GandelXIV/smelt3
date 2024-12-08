@@ -351,6 +351,7 @@ def check4skip():
 def shell(cmd):
     if check4skip():
         return
+    print(cmd)
     ret = subprocess.call(cmd, shell=True)
     if ret != 0:
         print(f"[ERROR] While shell processing: {cmd}")
@@ -359,11 +360,13 @@ def shell(cmd):
 def copy(src, dest):
     if check4skip():
         return
+    print(f"> copy {src} to {dest}")
     shutil.copy(src, dest)
 
 def delete(fname, ignore_error=False):
     if check4skip():
         return
+    print("> delete", fname)
     if ignore_error:
         try:
             os.remove(fname)
