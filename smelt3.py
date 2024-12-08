@@ -223,11 +223,11 @@ def use(art):
     if type(art) == type([]):
         for a in art:
             use(a)
-        return
+        return art
     elif type(art) == type({}):
         for val in art.values():
             use(val)
-        return
+        return art
 
     find_my_tasknode().srcs.append(art)
     art.set_used()
