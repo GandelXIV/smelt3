@@ -1,8 +1,9 @@
 import sys
 sys.path.insert(1, '../../')
 import smelt3
-from smelt3 import task, use, File, shell, file_tree
+from smelt3 import task, use, File, shell, file_tree, create_setting, sett
 
+create_setting("LINKER", "gcc")
 
 # Tasks are functions that simply return their produced artifacts
 @task('app', "Build the application")
@@ -12,8 +13,11 @@ def make_app():
     # All artifacts we want to use as sources need to be marked with the `use()` function
     obj1 = use(make_main(compiler="cc"))
     obj2 = use(make_lib())
+    # We can access settings using `sett`. The task will be rerun if the setting changes.
+    # Settings can updated in smeltrc.cfg, or in cli with the NAME=VALUE notation
+    LINKER = sett("LINKER")
     # `shell()` is an action, meaning it will only be executed if there was a change of sources
-    shell(f"gcc {obj1} {obj2} -o {out}")
+    shell(f"{LINKER} {obj1} {obj2} -o {out}")
     return File(out)
 
 @task('main.o')
@@ -22,7 +26,7 @@ def make_main(compiler="gcc"):
     out = "main.o"
     # If we want to depend on file content, we can use the `File` artifact
     src = use(File("main.c"))
-    hdr = use(File("lib.h"))
+    use(File("lib.h"))
     shell(f"{compiler} -c {src} -o {out}")
     # Artifacts can be configured to reduce build analysis time
     return File(out, mtime=True, hash=False)

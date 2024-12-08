@@ -1,23 +1,26 @@
 import sys, os, json, hashlib, inspect, atexit, shutil, subprocess
 
 HELP = """
-    No targets or options provided.
+    No targets, settings or options provided.
     Options:
     --help    -> display this info screen
     --list    -> show a list of all tasks
     --all     -> perform all named tasks
     --clean   -> clean cache and force remaking
+    Setting syntax: NAME=VALUE
     """
 # Config
 CACHE_FILENAME = ".smelt"
 CACHE_SYNC_PERIODIC = False
 CACHE_SYNC_ATEXIT = True
+SETTING_RC_FILENAME = "smeltrc.cfg"
 
 # Globals
 
 tasklist = {}
 cache = {}
 is_cache_changed = False
+settings = {}
 
 # Core
 
@@ -28,7 +31,9 @@ class TaskNode:
         self.pubname = pubname
         self.pubdesc = pubdesc
         self.skip = False
-        self.srcs = []
+        self.setting_tracker = Token({})
+        self.setting_tracker.set_used()
+        self.srcs = [self.setting_tracker] # First token will hold used settings
 
 def find_my_taskid():
     stack = inspect.stack()
@@ -43,6 +48,34 @@ def find_my_taskid():
 
 def find_my_tasknode():
     return tasklist[find_my_taskid()]
+
+## Setting management
+
+def create_setting(name, default_value):
+    global settings
+    settings[name] = default_value
+
+def sett(setting):
+    tn = find_my_tasknode()
+    if not (setting in tn.setting_tracker.token):
+        tn.setting_tracker.token[setting] = settings[setting]
+    return settings[setting]
+
+def update_setting(line):
+    (setting, value) = line.split("=")
+    if setting not in settings:
+        print(f"Unknown setting '{setting}'")
+        sys.exit()
+    settings[setting] = value
+
+def load_setting_rc():
+    global settings
+    if not os.path.exists(SETTING_RC_FILENAME):
+        return
+    print(f"Loading settings from {SETTING_RC_FILENAME}...")
+    for line in SETTING_RC_FILENAME:
+        if "=" in line:
+            update_setting(line)
 
 ## FS utils
 
@@ -62,7 +95,7 @@ def wf(name, data):
     with open(name, 'w') as f:
         return f.write(data)
 
-## Caching, for now inefficient
+## Caching
 
 def cache_spawn():
     global cache
@@ -136,6 +169,7 @@ def cli():
     if len(sys.argv) == 1:
         print(HELP)
         return
+    load_setting_rc()
     for arg in sys.argv[1:]:
         if arg[0:2] == "--":
             if arg == "--help":
@@ -150,6 +184,9 @@ def cli():
                             print(" -", tn.pubdesc)
                         else:
                             print('')
+                print("Avaiable settings:")
+                for s in settings:
+                    print(f"{s}={settings[s]}")
                 return
             elif arg == "--all":
                 for task in tasklist.values():
@@ -159,6 +196,8 @@ def cli():
                 wf(CACHE_FILENAME, "")
             else:
                 print(f"No option '{arg}' found")
+        elif "=" in arg:
+            update_setting(arg)
         else:
             do_task(arg)
 
@@ -229,7 +268,7 @@ class Token(Artifact):
         self.token = token
 
     def identify(self):
-        return self.token
+        return str(self.token)
 
     def exists(self):
         return True
