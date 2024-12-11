@@ -207,6 +207,9 @@ def do_task(name):
     for tn in tasklist.values():
         if tn.pubname == name:
             final = tn.fun()
+            if final == None:
+                validpubname = True
+                break
             if type(final) != type([]):
                 final = [final]
             print("[DONE] ", end="")
