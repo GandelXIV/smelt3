@@ -282,6 +282,9 @@ class Token(Artifact):
 
 class File(Artifact):
     def __init__(self, fname, mtime=False, hash=True, size=True):
+        if type(fname) == type(self):
+            self = fname
+            return
         super().__init__()
         self.fname = fname
         self.content = None
